@@ -697,10 +697,12 @@ const WebServer = function(options) {
                         }
                     }
                 });
+                PersistData = WebServer.UNPACK_PERSIST(WebServer.PERSIST_DATA_FILE);
                 res.json({
                     yFlipped: data.mapData.yFlipped,
                     path: coords,
-                    map: data.mapData.map
+                    map: data.mapData.map,
+                    persistdata: PersistData
                 });
             } else {
                 res.status(500).send(err.toString());
@@ -1034,6 +1036,101 @@ WebServer.FIND_LATEST_MAP_IN_ARCHIVE = function(callback) {
     })
 };
 
+WebServer.GET_NOGO_ZONES = function(data) {
+    let start_offset = 202984;
+    let block = data.slice(start_offset);
+
+    let numzones = block[0];
+    let zones = []
+    let start = 4;
+    
+    for (var i = 0; i < numzones; i++) {
+        zones.push([])
+        for (var j = 0; j < 8; j++) {
+
+            offset = start + 2 * j;
+            pt = block.readInt16LE(offset);
+            zones[i].push(pt)
+        }
+        start = offset + 2;
+    }
+    return zones;
+}
+
+
+WebServer.GET_VIRTUAL_WALLS = function(data) {
+    let start_offset = 203788;
+    let block = data.slice(start_offset);
+    
+    let numwalls = block[0];
+    let walls = []
+    let start = 4;
+
+    for (let i = 0; i < numwalls; i++) {
+        walls.push([])
+        for (let j = 0; j < 4; j++) {
+            offset = start + 2 * j;
+            let pt = block.readInt16LE(offset);
+            walls[i].push(pt)
+        }
+        start = offset + 2;
+    }
+    return walls;
+}
+
+
+WebServer.GET_CLEANED_ZONE = function(data) {
+    let start_offset = 202080;
+    let block = data.slice(start_offset);
+    
+    let numzones = block[0];
+    let cleaned = [];
+    let start = 4;
+
+    for (let i = 0; i < numzones; i++) {
+        cleaned.push([])
+        for (let j = 0; j < 4; j++) {
+            let offset = start + 2 * j;
+            let pt = block.readInt16LE(offset);
+            cleaned[i].push(pt)
+        }
+        start = offset + 2;
+    }
+
+    return cleaned;
+}
+
+
+WebServer.UNPACK_PERSIST = function(filename) {
+    let file;
+    let offset;
+    
+    try {
+        file = fs.readFileSync(path.join(filename));
+        // Seems different firmwares have different header sizes for PersistData_1.data
+        var possible_offsets = [23, 25];
+        for (let i in possible_offsets) {
+            offset = possible_offsets[i];
+            if (file[offset] == 120 && file[offset + 1] == 156) { // magic header for zlib
+                break;
+            }
+        }
+        let data = zlib.inflateSync(file.slice(offset));
+        let walls = WebServer.GET_VIRTUAL_WALLS(data);
+        let zones = WebServer.GET_NOGO_ZONES(data);
+        let cleaned = WebServer.GET_CLEANED_ZONE(data);
+        return {
+            walls: walls,
+            zones: zones,
+            cleaned: cleaned
+        };
+    } catch (err) {
+        return {
+            walls: [],
+            zones: []
+        };
+    }
+}
 WebServer.DECRYPT_AND_UNPACK_FILE = function(file, callback) {
     const decipher = crypto.createDecipheriv("aes-128-ecb", WebServer.ENCRYPTED_ARCHIVE_DATA_PASSWORD, "");
     let decryptedBuffer;
@@ -1078,6 +1175,7 @@ WebServer.MK_DIR_PATH = function(filepath) {
 WebServer.CORRECT_PPM_MAP_FILE_SIZE = 3145745;
 WebServer.CORRECT_GRID_MAP_FILE_SIZE = 1048576;
 WebServer.ENCRYPTED_ARCHIVE_DATA_PASSWORD = Buffer.from("RoCKR0B0@BEIJING");
+WebServer.PERSIST_DATA_FILE = '/mnt/data/rockrobo/PersistData_1.data';
 
 //This is the sole reason why I've bought a 21:9 monitor
 WebServer.WIFI_CONNECTED_IW_REGEX = /^Connected to ([0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2})(?:.*\s*)SSID: (.*)\s*freq: ([0-9]*)\s*signal: ([-]?[0-9]* dBm)\s*tx bitrate: ([0-9.]* .*)/;

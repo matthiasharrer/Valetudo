@@ -188,3 +188,58 @@ export class Zone {
         };
     }
 }
+
+/**
+ * Represents a virtual wall the robot does not pass
+ */
+export class VirtualWall  {
+
+    /**
+     * @param {DOMPoint} p1
+     * @param {DOMPoint} p2
+     */
+    constructor(p1, p2) {
+        this.p1 = p1;
+        this.p2 = p2;
+    }
+
+    draw(ctx, transformFromMapSpace) {
+        const p1Screen = this.p1.matrixTransform(transformFromMapSpace);
+        const p2Screen = this.p2.matrixTransform(transformFromMapSpace);
+
+        ctx.beginPath();
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        ctx.moveTo(p1Screen.x, p1Screen.y);
+        ctx.lineTo(p2Screen.x, p2Screen.y);
+        ctx.strokeStyle = 'red';
+        ctx.stroke();
+    }
+}
+
+/**
+ * Represents a nogo zone the robot does not enter
+ */
+export class NoGoZone  {
+
+    /**
+     * @param {DOMPoint} p1
+     * @param {DOMPoint} p2
+     */
+    constructor(p1, p2) {
+        this.p1 = p1;
+        this.p2 = p2;
+    }
+
+    draw(ctx, transformFromMapSpace) {
+        const p1Screen = this.p1.matrixTransform(transformFromMapSpace);
+        const p2Screen = this.p2.matrixTransform(transformFromMapSpace);
+
+        ctx.strokeStyle = "rgb(255, 0, 0)";
+        ctx.fillStyle = "rgba(255, 0, 0, 0.4)";
+
+        ctx.lineWidth = 2;
+        ctx.fillRect(p1Screen.x, p1Screen.y, p2Screen.x - p1Screen.x, p2Screen.y - p1Screen.y);
+        ctx.strokeRect(p1Screen.x, p1Screen.y, p2Screen.x - p1Screen.x, p2Screen.y - p1Screen.y);
+    }
+}

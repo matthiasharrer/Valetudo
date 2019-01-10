@@ -2,7 +2,7 @@ import { MapDrawer } from "./map-drawer.js";
 import { PathDrawer } from "./path-drawer.js";
 import { trackTransforms } from "./tracked-canvas.js";
 import { transformFromMeter, flipX, noTransform } from "./coordinate-transforms.js";
-import { GotoPoint, Zone } from "./locations.js";
+import { GotoPoint, Zone, VirtualWall, NoGoZone } from "./locations.js";
 
 /**
  * Represents the map and handles all the userinteractions
@@ -20,6 +20,7 @@ export function VacuumMap(canvasElement) {
     canvas.height = canvas.clientHeight;
 
     let location = null;
+    let virtualWallsAndNogoZones = [];
 
     let redrawCanvas = null;
 
@@ -40,7 +41,27 @@ export function VacuumMap(canvasElement) {
         pathDrawer.setPath(mapData.path);
         pathDrawer.setFlipped(mapData.yFlipped);
         pathDrawer.draw();
+
+        updateVirtualWalls(mapData.persistdata);
+
         if (redrawCanvas) redrawCanvas();
+    }
+
+    function updateVirtualWalls(persistdata) {
+        const virtualWallData = (persistdata || {}).walls || [];
+        const noGoZoneData = (persistdata || {}).zones || [];
+
+        virtualWallsAndNogoZones = virtualWallData.map(([x1, y1, x2, y2]) => {
+            const p1 = new DOMPoint(x1, y1);
+            const p2 = new DOMPoint(x2, y2);
+
+            return new VirtualWall(convertToMapCoords(p1), convertToMapCoords(p2));
+        }).concat(noGoZoneData.map(([x1, y1, x2, y2, x3, y3, x4, y4]) => {
+            const p1 = new DOMPoint(x1, y1);
+            const p2 = new DOMPoint(x3, y3);
+
+            return new NoGoZone(convertToMapCoords(p1), convertToMapCoords(p2));
+        }));
     }
 
     /**
@@ -53,6 +74,15 @@ export function VacuumMap(canvasElement) {
         const point = new DOMPoint(coordinatesInMapSpace.x, coordinatesInMapSpace.y).matrixTransform(mapCoordsToMeters);
         const [x1Real, y1Real] = [point.x, point.y].map(x => Math.round(-1000 * x));
         return { 'x': x1Real, 'y': y1Real };
+    }
+
+    /**
+     * Transforms coordinates in millimeter format into mapspace (1024*1024)
+     * @param {DOMPoint} coordinatesInMillimeters
+     */
+    function convertToMapCoords(coordinatesInMillimeters) {
+        const MillimetersToMapCoords = transformFromMeter.multiply(accountForFlip).scale(1/1000, 1/1000)
+        return coordinatesInMillimeters.matrixTransform(MillimetersToMapCoords);
     }
 
     /**
@@ -136,6 +166,8 @@ export function VacuumMap(canvasElement) {
         trackTransforms(ctx);
         mapDrawer.draw(data.map);
 
+        updateVirtualWalls(data.persistdata);
+
         const boundingBox = mapDrawer.boundingBox;
         const initialScalingFactor = Math.min(
             canvas.width / (boundingBox.maxX - boundingBox.minX),
@@ -194,6 +226,11 @@ export function VacuumMap(canvasElement) {
                     location.draw(ctx, transform);
                 });
             }
+            virtualWallsAndNogoZones.forEach(wallOrNogoZone => {
+                usingOwnTransform(ctx, (ctx, transform) => {
+                    wallOrNogoZone.draw(ctx, transform);
+                });
+            });
         }
         redraw();
         redrawCanvas = redraw;
