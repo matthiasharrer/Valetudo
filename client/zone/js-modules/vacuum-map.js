@@ -42,8 +42,6 @@ export function VacuumMap(canvasElement) {
         pathDrawer.setFlipped(mapData.yFlipped);
         pathDrawer.draw();
 
-        updateVirtualWalls(mapData.persistdata);
-
         if (redrawCanvas) redrawCanvas();
     }
 
@@ -155,7 +153,6 @@ export function VacuumMap(canvasElement) {
             alert("Please select a zone (two taps)");
         }
     }
-
     /**
      * Sets up the canvas for tracking taps / pans / zooms and redrawing the map accordingly
      * @param {object} mapData - the json data returned by the "/api/map/latest" route
@@ -166,7 +163,9 @@ export function VacuumMap(canvasElement) {
         trackTransforms(ctx);
         mapDrawer.draw(data.map);
 
-        updateVirtualWalls(data.persistdata);
+        fetch("../api/map/persistdata")
+            .then(res => res.json())
+            .then(updateVirtualWalls)
 
         const boundingBox = mapDrawer.boundingBox;
         const initialScalingFactor = Math.min(

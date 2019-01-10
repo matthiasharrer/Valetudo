@@ -697,12 +697,10 @@ const WebServer = function(options) {
                         }
                     }
                 });
-                PersistData = WebServer.UNPACK_PERSIST(WebServer.PERSIST_DATA_FILE);
                 res.json({
                     yFlipped: data.mapData.yFlipped,
                     path: coords,
                     map: data.mapData.map,
-                    persistdata: PersistData
                 });
             } else {
                 res.status(500).send(err.toString());
@@ -716,6 +714,18 @@ const WebServer = function(options) {
         });
     });
 
+    this.app.get("/api/map/persistdata", function(req,res){
+        var parsedUrl = url.parse(req.url, true);
+
+        WebServer.UNPACK_PERSIST(function(err, data){
+            if(!err) {
+                res.json(data);
+            } else {
+                res.status(500).send(err.toString());
+            }
+        });
+    });
+    
     //this results in searching client folder first and
     //if file was not found within that folder, the tmp folder will be searched for that file
     this.app.use(express.static(path.join(__dirname, "..", 'client')));
@@ -1101,12 +1111,12 @@ WebServer.GET_CLEANED_ZONE = function(data) {
 }
 
 
-WebServer.UNPACK_PERSIST = function(filename) {
+WebServer.UNPACK_PERSIST = function(callback) {
     let file;
     let offset;
     
     try {
-        file = fs.readFileSync(path.join(filename));
+        file = fs.readFileSync(path.join(WebServer.PERSIST_DATA_FILE));
         // Seems different firmwares have different header sizes for PersistData_1.data
         var possible_offsets = [23, 25];
         for (let i in possible_offsets) {
@@ -1119,16 +1129,15 @@ WebServer.UNPACK_PERSIST = function(filename) {
         let walls = WebServer.GET_VIRTUAL_WALLS(data);
         let zones = WebServer.GET_NOGO_ZONES(data);
         let cleaned = WebServer.GET_CLEANED_ZONE(data);
-        return {
+        callback(null, {
             walls: walls,
-            zones: zones,
-            cleaned: cleaned
-        };
+            zones: zones
+        });
     } catch (err) {
-        return {
+        callback(null, {
             walls: [],
             zones: []
-        };
+        });
     }
 }
 WebServer.DECRYPT_AND_UNPACK_FILE = function(file, callback) {
