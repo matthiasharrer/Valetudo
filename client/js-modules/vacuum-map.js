@@ -201,6 +201,12 @@ export function VacuumMap(canvasElement) {
         const gestureController = new Hammer(canvas);
         gestureController.get('pan').set({ direction: Hammer.DIRECTION_ALL });
         gestureController.get('pinch').set({ enable: true });
+        gestureController.domEvents = true;
+
+        gestureController.on("pan pinch tap", function(evt) {
+            evt.srcEvent.stopImmediatePropagation();
+            evt.srcEvent.preventDefault();
+        });
 
         let lastX = canvas.width / 2, lastY = canvas.height / 2;
 
