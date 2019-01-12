@@ -3,6 +3,7 @@ import { PathDrawer } from "./path-drawer.js";
 import { trackTransforms } from "./tracked-canvas.js";
 import { transformFromMeter, flipX, noTransform } from "./coordinate-transforms.js";
 import { GotoPoint, Zone } from "./locations.js";
+import { TouchHandler } from "./touch-handling.js";
 
 /**
  * Represents the map and handles all the userinteractions
@@ -198,24 +199,20 @@ export function VacuumMap(canvasElement) {
         redraw();
         redrawCanvas = redraw;
 
-        const gestureController = new Hammer(canvas);
-        gestureController.get('pan').set({ direction: Hammer.DIRECTION_ALL });
-        gestureController.get('pinch').set({ enable: true });
-
         let lastX = canvas.width / 2, lastY = canvas.height / 2;
 
         let dragStart;
 
         function startTranslate(evt) {
-            const { x, y } = relativeCoordinates(evt.center, canvas);
+            const { x, y } = relativeCoordinates(evt.coordinates, canvas);
             // subtracting the delta leads to the original point where the pan started
-            lastX = x - evt.deltaX;
-            lastY = y - evt.deltaY;
+            lastX = x
+            lastY = y;
             dragStart = ctx.transformedPoint(lastX, lastY);
         }
 
         function moveTranslate(evt) {
-            const { x, y } = relativeCoordinates(evt.center, canvas);
+            const { x, y } = relativeCoordinates(evt.currentCoordinates, canvas);
             const oldX = lastX;
             const oldY = lastY;
             lastX = x;
@@ -249,7 +246,7 @@ export function VacuumMap(canvasElement) {
         }
 
         function tap(evt) {
-            const { x, y } = relativeCoordinates(evt.center, canvas);
+            const { x, y } = relativeCoordinates(evt.tappedCoordinates, canvas);
             const tappedX = x;
             const tappedY = y;
             const tappedPoint = ctx.transformedPoint(tappedX, tappedY);
@@ -273,12 +270,17 @@ export function VacuumMap(canvasElement) {
             redraw();
         }
 
-        gestureController.on('tap', tap);
+        const touchHandler = new TouchHandler(canvas);
 
-        gestureController.on('panstart', startTranslate);
-        gestureController.on('panleft panright panup pandown', moveTranslate);
-        gestureController.on('panend', endTranslate);
-        gestureController.on('pancancel', cancelTranslate);
+        canvas.addEventListener("tap", tap);
+        canvas.addEventListener('panstart', startTranslate);
+        canvas.addEventListener('panmove', moveTranslate);
+        canvas.addEventListener('panend', endTranslate);
+
+        // gestureController.on('panstart', startTranslate);
+        // gestureController.on('panmove', moveTranslate);
+        // gestureController.on('panend', endTranslate);
+        // gestureController.on('pancancel', cancelTranslate);
 
 
         let lastScaleFactor = 1;
@@ -314,14 +316,14 @@ export function VacuumMap(canvasElement) {
         }
 
 
-        gestureController.on('pinchstart', startPinch);
-        gestureController.on('pinchmove', movePinch);
-        gestureController.on('pinchend', endPinch);
-        gestureController.on('pinchcancel', cancelPinch);
+        // gestureController.on('pinchstart', startPinch);
+        // gestureController.on('pinchmove', movePinch);
+        // gestureController.on('pinchend', endPinch);
+        // gestureController.on('pinchcancel', cancelPinch);
 
 
-        gestureController.on('pinchin', scalePinch);
-        gestureController.on('pinchout', scalePinch);
+        // gestureController.on('pinchin', scalePinch);
+        // gestureController.on('pinchout', scalePinch);
 
         const scaleFactor = 1.1;
         /**
