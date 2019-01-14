@@ -205,7 +205,6 @@ export function VacuumMap(canvasElement) {
 
         function startTranslate(evt) {
             const { x, y } = relativeCoordinates(evt.coordinates, canvas);
-            // subtracting the delta leads to the original point where the pan started
             lastX = x
             lastY = y;
             dragStart = ctx.transformedPoint(lastX, lastY);
@@ -232,11 +231,6 @@ export function VacuumMap(canvasElement) {
                 ctx.translate(pt.x - dragStart.x, pt.y - dragStart.y);
                 redraw();
             }
-        }
-
-        function cancelTranslate(evt) {
-            dragStart = null;
-            displayLocationCoordinates(location);
         }
 
         function endTranslate(evt) {
@@ -276,33 +270,26 @@ export function VacuumMap(canvasElement) {
         canvas.addEventListener('panstart', startTranslate);
         canvas.addEventListener('panmove', moveTranslate);
         canvas.addEventListener('panend', endTranslate);
-
-        // gestureController.on('panstart', startTranslate);
-        // gestureController.on('panmove', moveTranslate);
-        // gestureController.on('panend', endTranslate);
-        // gestureController.on('pancancel', cancelTranslate);
+        canvas.addEventListener('pinchstart', startPinch);
+        canvas.addEventListener('pinchmove', scalePinch);
+        canvas.addEventListener('pinchend', endPinch);
 
 
         let lastScaleFactor = 1;
         function startPinch(evt) {
-            startTranslate(evt);
             lastScaleFactor = 1;
-        }
 
-        function movePinch(evt) {
-            moveTranslate(evt);
+            // translate
+            const { x, y } = relativeCoordinates(evt.center, canvas);
+            lastX = x
+            lastY = y;
+            dragStart = ctx.transformedPoint(lastX, lastY);
         }
 
         function endPinch(evt) {
             const [scaleX, scaleY] = ctx.getScaleFactor2d();
             pathDrawer.scale(scaleX);
             endTranslate(evt);
-        }
-
-        function cancelPinch(evt) {
-            const [scaleX, scaleY] = ctx.getScaleFactor2d();
-            pathDrawer.scale(scaleX);
-            cancelTranslate(evt);
         }
 
         function scalePinch(evt) {
@@ -312,18 +299,16 @@ export function VacuumMap(canvasElement) {
             ctx.translate(pt.x, pt.y);
             ctx.scale(factor, factor);
             ctx.translate(-pt.x, -pt.y);
+
+            // translate
+            const { x, y } = relativeCoordinates(evt.center, canvas);
+            lastX = x;
+            lastY = y;
+            const p = ctx.transformedPoint(lastX, lastY);
+            ctx.translate(p.x - dragStart.x, p.y - dragStart.y);
+
             redraw();
         }
-
-
-        // gestureController.on('pinchstart', startPinch);
-        // gestureController.on('pinchmove', movePinch);
-        // gestureController.on('pinchend', endPinch);
-        // gestureController.on('pinchcancel', cancelPinch);
-
-
-        // gestureController.on('pinchin', scalePinch);
-        // gestureController.on('pinchout', scalePinch);
 
         const scaleFactor = 1.1;
         /**
