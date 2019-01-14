@@ -58,7 +58,7 @@ class EventCache {
     }
 }
 
-const tapTolerance = 10;
+const tapTolerance = 5;
 
 function distance([x1, y1], [x2, y2]) {
     return Math.sqrt(
