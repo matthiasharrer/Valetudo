@@ -1,69 +1,145 @@
-class EventCache {
-    constructor() {
-        this.cache = [];
-    }
-
-    addPointer(event) {
-        if(this.cache.length === 1) {
-            // As this is the pinch start update the down position of the initial pointer to its last position
-            this.cache[0].downPosition = this.cache[0].lastPosition;
-        } else if(this.cache.length > 1) {
-            // Ignore more than two pointers
-            return;
-        }
-
-        this.cache.push({
-            pointerId: event.pointerId,
-            downPosition: [event.clientX, event.clientY],
-            lastPosition: [event.clientX, event.clientY]
-        });
-    }
-
-    updatePointer(event) {
-        const knownPointer = this.cache.find(x => x.pointerId === event.pointerId);
-        if(knownPointer) {
-            knownPointer.lastPosition = [event.clientX, event.clientY];
-        }
-    }
-
-    removePointer(pointerId) {
-        for (var i = 0; i < this.cache.length; i++) {
-            if (this.cache[i].pointerId == pointerId) {
-                this.cache.splice(i, 1);
-                break;
-            }
-        }
-    }
-
-    getPositions(pointerId) {
-        const knownPointer = this.cache.find(x => x.pointerId === pointerId);
-
-        if(!knownPointer) return undefined;
-
-        return {
-            downPosition: knownPointer.downPosition,
-            lastPosition: knownPointer.lastPosition
-        }
-    }
-
-    getSecondPositions(pointerId) {
-        const firstOtherPointer = this.cache.find(x => x.pointerId !== pointerId);
-
-        if(!firstOtherPointer) return undefined;
-
-        return {
-            downPosition: firstOtherPointer.downPosition,
-            lastPosition: firstOtherPointer.lastPosition
-        }
-    }
-}
-
-const tapTolerance = 5;
-
 function distance([x1, y1], [x2, y2]) {
     return Math.sqrt(
         Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)
     );
+}
+
+class NoGesture {
+    constructor() {}
+    updatePointerPosition(evt) {}
+    removePointer(evt) {
+        return this;
+    }
+}
+
+class PossibleTap {
+    constructor(pointerDownEvent, dispatchEvent) {
+        this.tapTolerance = 5;
+        this.pointerId = pointerDownEvent.pointerId;
+        this.pointerDownPosition = [pointerDownEvent.clientX, pointerDownEvent.clientY];
+        this.lastPosition = [pointerDownEvent.clientX, pointerDownEvent.clientY];
+
+        this.dispatchEvent = dispatchEvent;
+    }
+
+    toleranceExeeded() {
+        return distance(this.lastPosition, this.pointerDownPosition) > this.tapTolerance;
+    }
+
+    updatePointerPosition(evt) {
+        this.lastPosition = [evt.clientX, evt.clientY];
+    }
+
+    removePointer(evt) {
+        if(evt.pointerId === this.pointerId) {
+            const tapEvent = new Event("tap");
+            tapEvent.tappedCoordinates = {x: this.pointerDownPosition[0], y: this.pointerDownPosition[1]};
+            this.dispatchEvent(tapEvent);
+
+            return new NoGesture();
+        } else {
+            return this;
+        }
+    }
+}
+
+class OngoingPan {
+    constructor(pointerId, [pointerDownX, pointerDownY], [currentX, currentY], dispatchEvent) {
+        this.pointerId = pointerId;
+        this.pointerDownPosition = [pointerDownX, pointerDownY];
+        this.lastPosition = [currentX, currentY];
+
+        this.dispatchEvent = dispatchEvent;
+
+        const panStartEvent = new Event("panstart");
+        panStartEvent.coordinates = {x: this.pointerDownPosition[0], y: this.pointerDownPosition[1]};
+        this.dispatchEvent(panStartEvent);
+    }
+
+    updatePointerPosition(evt) {
+        this.lastPosition = [evt.clientX, evt.clientY];
+
+        const panMoveEvent = new Event("panmove");
+        panMoveEvent.startCoordinates = {x: this.pointerDownPosition[0], y: this.pointerDownPosition[1]};
+        panMoveEvent.currentCoordinates = {x: evt.clientX, y: evt.clientY};
+        this.dispatchEvent(panMoveEvent);
+    }
+
+    removePointer(evt) {
+        if(evt.pointerId === this.pointerId) {
+            const panEndEvent = new Event("panend");
+            panEndEvent.startCoordinates = {x: this.pointerDownPosition[0], y: this.pointerDownPosition[1]};
+            panEndEvent.currentCoordinates = {x: evt.clientX, y: evt.clientY};
+            this.dispatchEvent(panEndEvent);
+
+            return new NoGesture();
+        } else {
+            return this;
+        }
+    }
+}
+
+class OngoingPinch {
+    constructor(pointerId, [pointerDownX, pointerDownY], secondPointerDownEvent, dispatchEvent) {
+        this.tapTolerance = 5;
+        this.pointerId = pointerId;
+        this.pointerDownPosition = [pointerDownX, pointerDownY];
+        this.lastPosition = [pointerDownX, pointerDownY];
+        this.pointer2Id = secondPointerDownEvent.pointerId;
+        this.pointer2DownPosition = [secondPointerDownEvent.clientX, secondPointerDownEvent.clientY];
+        this.lastPosition2 = [secondPointerDownEvent.clientX, secondPointerDownEvent.clientY];
+
+        this.dispatchEvent = dispatchEvent;
+
+        const pinchStartEvent = new Event("pinchstart");
+        pinchStartEvent.distance = distance(this.pointerDownPosition, this.pointer2DownPosition);
+        pinchStartEvent.scale = 1;
+        pinchStartEvent.center = {
+            x: (this.pointerDownPosition[0] + this.pointer2DownPosition[0]) / 2,
+            y: (this.pointerDownPosition[1] + this.pointer2DownPosition[1]) / 2
+        }
+        this.dispatchEvent(pinchStartEvent);
+    }
+
+    updatePointerPosition(evt) {
+        if(evt.pointerId === this.pointerId) {
+            this.lastPosition = [evt.clientX, evt.clientY];
+        } else if (evt.pointerId === this.pointer2Id) {
+            this.lastPosition2 = [evt.clientX, evt.clientY];
+        }
+
+        const pinchMoveEvent = new Event("pinchmove");
+        pinchMoveEvent.distance = distance(this.lastPosition, this.lastPosition2);
+        pinchMoveEvent.scale = pinchMoveEvent.distance / distance(this.pointerDownPosition, this.pointer2DownPosition);
+        pinchMoveEvent.center = {
+            x: (this.lastPosition[0] + this.lastPosition2[0]) / 2,
+            y: (this.lastPosition[1] + this.lastPosition2[1]) / 2
+        }
+
+        this.dispatchEvent(pinchMoveEvent);
+    }
+
+    removePointer(evt) {
+        if(evt.pointerId === this.pointerId) {
+            this.dispatchEvent(new Event("pinchend"));
+            return new OngoingPan(
+                this.pointer2Id,
+                this.lastPosition2,
+                this.lastPosition2,
+                this.dispatchEvent
+            );
+        } else if (evt.pointerId === this.pointer2Id) {
+            this.dispatchEvent(new Event("pinchend"));
+            return new OngoingPan(
+                this.pointerId,
+                this.lastPosition,
+                this.lastPosition,
+                this.dispatchEvent
+            );
+        } else {
+            return this;
+        }
+    }
 }
 
 export class TouchHandler {
@@ -75,43 +151,34 @@ export class TouchHandler {
         this.trackedElement.addEventListener("pointerdown", e => this.pointerDown(e));
         this.trackedElement.addEventListener("pointermove", e => this.pointerMove(e));
         this.trackedElement.addEventListener("pointerup", e => this.pointerUp(e));
-        this.trackedElement.addEventListener("pointercancel", e => this.pointerCancel(e));
-        this.trackedElement.addEventListener("pointerout", e => this.pointerCancel(e));
-        this.trackedElement.addEventListener("pointerleave", e => this.pointerCancel(e));
+        this.trackedElement.addEventListener("pointerleave", e => this.pointerUp(e));
+        this.trackedElement.addEventListener("pointerout", e => this.pointerUp(e));
+        this.trackedElement.addEventListener("pointercancel", e => this.pointerUp(e));
 
         // ignore events for overwriting onsenui touch handling
         this.trackedElement.addEventListener("touchstart", evt => evt.stopPropagation());
         this.trackedElement.addEventListener("touchmove", evt => evt.stopPropagation());
         this.trackedElement.addEventListener("touchend", evt => evt.stopPropagation());
 
-        this.startTouch = null;
-        this.lastTouch = null;
-        this.isTap = true;
-
-        this.eventCache = new EventCache();
+        this.ongoingGesture = new NoGesture();
     }
 
     pointerDown(evt) {
         evt.stopPropagation();
         evt.preventDefault();
 
-        this.eventCache.addPointer(evt);
+        if(this.ongoingGesture instanceof NoGesture) {
+            this.ongoingGesture = new PossibleTap(evt, this.trackedElement.dispatchEvent.bind(this.trackedElement));
 
-        const thisPointerpositions = this.eventCache.getPositions(evt.pointerId);
-        const secondPointerPositions = this.eventCache.getSecondPositions(evt.pointerId);
-
-        if(thisPointerpositions && secondPointerPositions) {
-            this.isTap = false;
-            const pinchStartEvent = new Event("pinchstart");
-            pinchStartEvent.distance = distance(thisPointerpositions.downPosition, secondPointerPositions.downPosition);
-            pinchStartEvent.scale = 1;
-            pinchStartEvent.center = {
-                x: (thisPointerpositions.downPosition[0] + secondPointerPositions.downPosition[0]) / 2,
-                y: (thisPointerpositions.downPosition[1] + secondPointerPositions.downPosition[1]) / 2
-            }
-            this.trackedElement.dispatchEvent(pinchStartEvent);
-        } else {
-            this.isTap = true;
+        } else if(this.ongoingGesture instanceof PossibleTap || this.ongoingGesture instanceof OngoingPan) {
+            this.ongoingGesture = new OngoingPinch(
+                this.ongoingGesture.pointerId,
+                // start the pinch with the first pointer at the current position
+                // (when the second pointer was added)
+                this.ongoingGesture.lastPosition,
+                evt,
+                this.trackedElement.dispatchEvent.bind(this.trackedElement)
+            );
         }
     }
 
@@ -119,86 +186,23 @@ export class TouchHandler {
         evt.stopPropagation();
         evt.preventDefault();
 
-        const positions = this.eventCache.getPositions(evt.pointerId);
-        const secondPointerPositions = this.eventCache.getSecondPositions(evt.pointerId);
+        this.ongoingGesture.updatePointerPosition(evt);
 
-        if(positions && !secondPointerPositions) {
-            this.panMove(evt, positions);
-        } else if(positions && secondPointerPositions) {
-            this.pinchMove(evt, positions, secondPointerPositions);
+        // Upgrade Tap to a Pan if the movement tolerance is exeeded
+        if(this.ongoingGesture instanceof PossibleTap && this.ongoingGesture.toleranceExeeded(evt)) {
+            this.ongoingGesture = new OngoingPan(
+                this.ongoingGesture.pointerId,
+                this.ongoingGesture.pointerDownPosition,
+                this.ongoingGesture.lastPosition,
+                this.trackedElement.dispatchEvent.bind(this.trackedElement)
+            )
         }
-    }
-
-    panMove(evt, positions) {
-        this.eventCache.updatePointer(evt);
-        if(this.isTap && distance(positions.downPosition, positions.lastPosition) > tapTolerance) {
-            this.isTap = false;
-
-            const panStartEvent = new Event("panstart");
-            panStartEvent.coordinates = {x: positions.downPosition[0], y: positions.downPosition[1]};
-            this.trackedElement.dispatchEvent(panStartEvent);
-        } else if(!this.isTap) {
-            const panMoveEvent = new Event("panmove");
-            panMoveEvent.startCoordinates = {x: positions.downPosition[0], y: positions.downPosition[1]};
-            panMoveEvent.currentCoordinates = {x: evt.clientX, y: evt.clientY};
-            this.trackedElement.dispatchEvent(panMoveEvent);
-        }
-    }
-
-    pinchMove(evt, thisPointerpositions, secondPointerPositions) {
-        this.eventCache.updatePointer(evt);
-        this.isTap = false;
-
-        const pinchMoveEvent = new Event("pinchmove");
-        pinchMoveEvent.distance = distance(thisPointerpositions.lastPosition, secondPointerPositions.lastPosition);
-        pinchMoveEvent.scale = pinchMoveEvent.distance / distance(thisPointerpositions.downPosition, secondPointerPositions.downPosition);
-        pinchMoveEvent.center = {
-            x: (thisPointerpositions.lastPosition[0] + secondPointerPositions.lastPosition[0]) / 2,
-            y: (thisPointerpositions.lastPosition[1] + secondPointerPositions.lastPosition[1]) / 2
-        }
-
-        this.trackedElement.dispatchEvent(pinchMoveEvent);
     }
 
     pointerUp(evt) {
         evt.stopPropagation();
         evt.preventDefault();
 
-        const positions = this.eventCache.getPositions(evt.pointerId);
-        const secondPointerPositions = this.eventCache.getSecondPositions(evt.pointerId);
-
-        if(positions && secondPointerPositions) {
-            this.trackedElement.dispatchEvent(new Event("pinchend"));
-            this.eventCache.removePointer(evt.pointerId);
-        } else if(positions) {
-            if(distance(positions.downPosition, [evt.clientX, evt.clientY]) > tapTolerance) {
-                this.isTap = false;
-            }
-            if(this.isTap) {
-                const tapEvent = new Event("tap");
-                tapEvent.tappedCoordinates = {x: positions.downPosition[0], y: positions.downPosition[1]};
-                this.trackedElement.dispatchEvent(tapEvent);
-            } else {
-                const panEndEvent = new Event("panend");
-                panEndEvent.startCoordinates = {x: positions.downPosition[0], y: positions.downPosition[1]};
-                panEndEvent.currentCoordinates = {x: evt.clientX, y: evt.clientY};
-                this.trackedElement.dispatchEvent(panEndEvent);
-            }
-            this.eventCache.removePointer(evt.pointerId);
-        }
-    }
-
-    pointerCancel(evt) {
-        evt.stopPropagation();
-        evt.preventDefault();
-
-        const positions = this.eventCache.getPositions(evt.pointerId);
-        const secondPointerPositions = this.eventCache.getSecondPositions(evt.pointerId);
-
-        if(positions && secondPointerPositions) {
-            this.trackedElement.dispatchEvent(new Event("pinchend"));
-        }
-
-        this.eventCache.removePointer(evt.pointerId);
+        this.ongoingGesture = this.ongoingGesture.removePointer(evt);
     }
 }
