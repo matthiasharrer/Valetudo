@@ -6,7 +6,6 @@
     <link rel="manifest" href="/manifest.json">
     <script src="js/onsenui.min.js"></script>
     <script src="js/geometry-polyfill.js"></script>
-    <script src="js/hammer.min.js"></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#4285f4">
@@ -30,18 +29,6 @@
         window.fn.loadLink = function (url) {
             window.open(url, '_blank');
         };
-
-        window.fn.setSwipeable = function(bool) {
-            if(bool) {
-                document.getElementById("appNavigator").setAttribute("swipable");
-                document.getElementById("sidemenu").setAttribute("swipable");
-                document.getElementById("appTabbar").setAttribute("swipable");
-            } else {
-                document.getElementById("appNavigator").removeAttribute("swipable");
-                document.getElementById("sidemenu").removeAttribute("swipable");
-                document.getElementById("appTabbar").removeAttribute("swipable");
-            }
-        }
 
         window.fn.pushPage = function (page, anim) {
             if (anim) {
@@ -1364,21 +1351,11 @@
             <ons-progress-bar id="loading-bar-map" value="0" indeterminate="indeterminate"></ons-progress-bar>
             <div class="map-container">
                 <canvas id="map-canvas"></canvas>
-                <div id="console">
-                    <div class="pt_val">
-                        <label for="x1">X1: </label><input type="text" name="x1" id="x1" readonly /><label for="y1">Y1: </label><input type="text" name="y1" id="y1" readonly />
-                    </div>
-                    <div class="pt_val">
-                        <label for="x2">X2: </label><input type="text" name="x2" id="x2" readonly /><label for="y2">Y2: </label><input type="text" name="y2" id="y2" readonly />
-                    </div>
-                </div>
                 <button id="goto">Goto</button>
                 <button id="zone">Zone</button>
             </div>
-
             <script type="module">
                 import { VacuumMap } from "./js-modules/vacuum-map.js"
-                import ons from 'onsenui/esm';
 
                 const loadingBar = document.getElementById('loading-bar-map');
                 let map = null;
@@ -1408,28 +1385,21 @@
                     })
                 }
                 updateMapPage();
+                window.fn.updateMapPage = updateMapPage;
+                window.fn.cancelUpdateMap = () => {
+                    window.clearTimeout(currentRefreshTimer);
+                };
+            </script>
 
+            <script defer>
+                // Somehow getScriptPage returns null inside the type=module script tag
                 ons.getScriptPage().onShow = function () {
-                    updateMapPage();
-                    window.fn.setSwipeable(false);
+                    window.fn.updateMapPage();
                 };
 
                 ons.getScriptPage().onHide = function () {
-                    window.clearTimeout(currentRefreshTimer);
-                    window.fn.setSwipeable(true);
+                    window.fn.cancelUpdateMap();
                 };
-
-                function fetchmap() {
-                    fetch("/api/map/latest?doNotTransformPath")
-                        .then(res => res.json())
-                        .then(map.updateMap)
-                        .then(_ => setTimeout(fetchmap, 3000));
-                }
-
-                fetch("/api/map/latest?doNotTransformPath")
-                    .then(res => res.json())
-                    .then(map.initCanvas)
-                    .then(_ => setTimeout(fetchmap, 3000));
             </script>
             <style>
                 :root {
@@ -1447,7 +1417,7 @@
                     width: 100%;
                     display: grid;
                     grid-template-columns: 1fr 1fr;
-                    grid-template-rows: 1fr 100px;
+                    grid-template-rows: 1fr 50px;
                     grid-template-areas:
                         "map map"
                         "button1 button2";
@@ -1459,35 +1429,6 @@
                     grid-area: map;
                     touch-action: none;
                     background-image: linear-gradient(var(--map-background-1), var(--map-background-2));
-                }
-                #console {
-                display: block;
-                position: absolute;
-                right: 0;
-                top: 0;
-                width: 300px;
-                max-width: 90%;
-                    background: rgba(255,255,255,0.8);
-                    border: 1px solid #000;
-                    padding: 10px;
-                }
-                #console .pt_val {
-                    width: 100%;
-                    position: relative;
-                    overflow: hidden;
-                    display: block;
-                    margin-bottom: 5px;
-                }
-                #console label, #console input {
-                    display: inline;
-                    margin: 0;
-                    padding: 0;
-                }
-                #console label {
-                    width: 13%;
-                }
-                #console input {
-                    width: 35%;
                 }
             </style>
         </ons-page>
