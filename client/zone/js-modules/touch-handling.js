@@ -79,6 +79,11 @@ export class TouchHandler {
         this.trackedElement.addEventListener("pointerout", e => this.pointerCancel(e));
         this.trackedElement.addEventListener("pointerleave", e => this.pointerCancel(e));
 
+        // ignore events for overwriting onsenui touch handling
+        this.trackedElement.addEventListener("touchstart", evt => evt.stopPropagation());
+        this.trackedElement.addEventListener("touchmove", evt => evt.stopPropagation());
+        this.trackedElement.addEventListener("touchend", evt => evt.stopPropagation());
+
         this.startTouch = null;
         this.lastTouch = null;
         this.isTap = true;
