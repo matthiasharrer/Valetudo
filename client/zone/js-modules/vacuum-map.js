@@ -20,7 +20,7 @@ export function VacuumMap(canvasElement) {
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
 
-    let location = null;
+    let locations = [];
 
     let redrawCanvas = null;
 
@@ -76,54 +76,6 @@ export function VacuumMap(canvasElement) {
             document.getElementById("y1").value = p.y;
             document.getElementById("x2").value = '';
             document.getElementById("y2").value = '';
-        }
-    }
-
-    /**
-     * Calls the goto api route with the currently set goto coordinates
-     */
-    function goto_point() {
-        if (location instanceof GotoPoint) {
-            const gotoPoint = convertToRealCoords(location);
-            fetch("../api/go_to", {
-                method: "put",
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(gotoPoint)
-            })
-                .then(res => res.text())
-                .then(console.log);
-        } else {
-            alert("Please select a single point");
-        }
-    }
-
-    /**
-     * Calls the zoned_cleanup api route with the currently set zone
-     */
-    function zoned_cleanup() {
-        if (location instanceof Zone) {
-            const p1Real = convertToRealCoords({x: location.x1, y: location.y1});
-            const p2Real = convertToRealCoords({x: location.x2, y: location.y2});
-
-            fetch("../api/start_cleaning_zone", {
-                method: "put",
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify([[
-                    Math.min(p1Real.x, p2Real.x),
-                    Math.min(p1Real.y, p2Real.y),
-                    Math.max(p1Real.x, p2Real.x),
-                    Math.max(p1Real.y, p2Real.y),
-                    1
-                ]])
-            })
-                .then(res => res.text())
-                .then(console.log);
-        } else {
-            alert("Please select a zone (two taps)");
         }
     }
 
@@ -190,11 +142,12 @@ export function VacuumMap(canvasElement) {
             ctx.drawImage(pathDrawer.canvas, 0, 0);
             ctx.scale(pathScale, pathScale);
 
-            if(location) {
-                usingOwnTransform(ctx, (ctx, transform) => {
+
+            usingOwnTransform(ctx, (ctx, transform) => {
+                locations.forEach(location => {
                     location.draw(ctx, transform);
                 });
-            }
+            });
         }
         redraw();
         redrawCanvas = redraw;
@@ -218,15 +171,35 @@ export function VacuumMap(canvasElement) {
             lastY = y;
 
             if (dragStart) {
-                if(location && typeof location.translate === "function") {
-                    const result = location.translate(dragStart.matrixTransform(ctx.getTransform().inverse()), {x: oldX, y: oldY}, {x, y}, ctx.getTransform());
-                    location = result.updatedLocation;
-                    if(result.stopPropagation === true) {
-                        redraw();
-                        return;
+                // Let each location handle the panning event
+                // the location can return a stopPropagation bool which
+                // stops the event handling by other locations / the main canvas
+                for(let i = 0; i < locations.length; ++i) {
+                    const location = locations[i];
+                    if(typeof location.translate === "function") {
+                        const result = location.translate(
+                            dragStart.matrixTransform(ctx.getTransform().inverse()),
+                            {x: oldX, y: oldY},
+                            {x, y},
+                            ctx.getTransform()
+                        );
+                        if(result.updatedLocation) {
+                            locations[i] = result.updatedLocation;
+                        } else {
+                            locations.splice(i, 1);
+                            i--;
+                        }
+                        if(result.stopPropagation === true) {
+                            redraw();
+                            return;
+                        }
                     }
                 }
+                // locations could be removed
+                // not quite nice to handle with the for loop
+                locations = locations.filter(location => location !== null);
 
+                // If no location stopped event handling -> pan the whole map
                 const pt = ctx.transformedPoint(lastX, lastY);
                 ctx.translate(pt.x - dragStart.x, pt.y - dragStart.y);
                 redraw();
@@ -245,22 +218,33 @@ export function VacuumMap(canvasElement) {
             const tappedY = y;
             const tappedPoint = ctx.transformedPoint(tappedX, tappedY);
 
-            if(location && typeof location.tap === "function") {
-                const result = location.tap({x: tappedX, y: tappedY}, ctx.getTransform());
-                location = result.updatedLocation;
-                if(result.stopPropagation === true) {
-                    redraw();
-                    return;
+            // Let each location handle the tapping event
+            // the location can return a stopPropagation bool which
+            // stops the event handling by other locations / the main canvas
+            for(let i = 0; i < locations.length; ++i) {
+                const location = locations[i];
+                if(typeof location.translate === "function") {
+                    const result = location.tap({x: tappedX, y: tappedY}, ctx.getTransform());
+                    if(result.updatedLocation) {
+                        locations[i] = result.updatedLocation;
+                    } else {
+                        locations.splice(i, 1);
+                        i--;
+                    }
+                    if(result.stopPropagation === true) {
+                        redraw();
+                        return;
+                    }
                 }
             }
 
-            if(location == null) {
-                location = new GotoPoint(tappedPoint.x, tappedPoint.y);
-            } else if(location instanceof GotoPoint) {
-                location = location.toZone(tappedPoint.x, tappedPoint.y);
+            if(locations.length === 0) {
+                locations.push(new GotoPoint(tappedPoint.x, tappedPoint.y));
+            } else if(locations.length === 1 && locations[0] instanceof GotoPoint) {
+                locations[0] = new GotoPoint(tappedPoint.x, tappedPoint.y);
             }
 
-            displayLocationCoordinates(location);
+            if(locations.length === 0) displayLocationCoordinates(location);
             redraw();
         }
 
@@ -336,11 +320,52 @@ export function VacuumMap(canvasElement) {
         canvas.addEventListener('mousewheel', handleScroll, false);
     };
 
+    const prepareGotoCoordinatesForApi = (gotoPoint) => {
+        const point = convertToRealCoords(gotoPoint);
+        return {
+            x: point.x,
+            y: point.y
+        };
+    };
+
+    const prepareZoneCoordinatesForApi = (zone) => {
+        const p1Real = convertToRealCoords({x: zone.x1, y: zone.y1});
+        const p2Real = convertToRealCoords({x: zone.x2, y: zone.y2});
+
+        return [
+            Math.min(p1Real.x, p2Real.x),
+            Math.min(p1Real.y, p2Real.y),
+            Math.max(p1Real.x, p2Real.x),
+            Math.max(p1Real.y, p2Real.y)
+        ];
+    };
+
+    function getLocations() {
+        const zones = locations
+            .filter(location => location instanceof Zone)
+            .map(prepareZoneCoordinatesForApi);
+
+        const gotoPoints = locations
+            .filter(location => location instanceof GotoPoint)
+            .map(prepareGotoCoordinatesForApi);
+
+        return {
+            zones,
+            gotoPoints
+        };
+    }
+
+    function addZone() {
+        const newZone = new Zone(500, 500, 530, 530);
+        locations.push(newZone);
+        if (redrawCanvas) redrawCanvas();
+    }
+
     return {
         initCanvas: initCanvas,
         updateMap: updateMap,
-        goto_point: goto_point,
-        zoned_cleanup: zoned_cleanup
+        getLocations: getLocations,
+        addZone: addZone
     };
 }
 

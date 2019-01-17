@@ -27,11 +27,11 @@
 
         body {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
             grid-template-rows: 1fr 100px;
             grid-template-areas:
-                "map map"
-                "button1 button2";
+                "map map map map"
+                "button1 button2 button3 button4";
             justify-items: stretch;
             align-items: stretch;
         }
@@ -83,8 +83,10 @@
             <label for="x2">X2: </label><input type="text" name="x2" id="x2" readonly /><label for="y2">Y2: </label><input type="text" name="y2" id="y2" readonly />
         </div>
     </div>
+    <button id="add_zone">Add zone</button>
     <button id="goto">Goto</button>
-    <button id="zone">Zone</button>
+    <button id="repeat">Repeat: 1</button>
+    <button id="clean">Clean</button>
     <script src="geometry-polyfill.js"></script>
     <script src="main.js" type="module"></script>
 </body>
