@@ -32,6 +32,7 @@ export function VacuumMap(canvasElement) {
      * @param {object} mapData - the json data returned by the "/api/map/latest" route
      */
     function updateMap(mapData) {
+        const start = new Date();
         if (mapData.yFlipped) {
             accountForFlip = flipX;
         } else {
@@ -42,6 +43,9 @@ export function VacuumMap(canvasElement) {
         pathDrawer.setFlipped(mapData.yFlipped);
         pathDrawer.draw();
         if (redrawCanvas) redrawCanvas();
+        const end = new Date();
+
+        console.log(`redraw took ${end - start} ms. This means only drawing could reach ${1000 / (end - start)} fps.`);
     }
 
     /**
