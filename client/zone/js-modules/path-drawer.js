@@ -88,24 +88,22 @@ export function PathDrawer() {
     }
 
     function drawRobot(position, angle) {
-        if (path.length > 1) {
-            const ctx = canvas.getContext("2d");
-            function rotateRobot(img, angle) {
-                var canvasimg = document.createElement("canvas");
-                canvasimg.width = img.width;
-                canvasimg.height = img.height;
-                var ctximg = canvasimg.getContext('2d');
-                const offset = 90;
-                ctximg.clearRect(0, 0, img.width, img.height);
-                ctximg.translate(img.width / 2, img.width / 2);
-                ctximg.rotate((angle + offset) * Math.PI / 180);
-                ctximg.translate(-img.width / 2, -img.width / 2);
-                ctximg.drawImage(img, 0, 0);
-                return canvasimg;
-            }
-
-            ctx.drawImage(rotateRobot(img_rocky, angle), position.x - 15, position.y - 15, img_rocky.width, img_rocky.height);
+        const ctx = canvas.getContext("2d");
+        function rotateRobot(img, angle) {
+            var canvasimg = document.createElement("canvas");
+            canvasimg.width = img.width;
+            canvasimg.height = img.height;
+            var ctximg = canvasimg.getContext('2d');
+            const offset = 90;
+            ctximg.clearRect(0, 0, img.width, img.height);
+            ctximg.translate(img.width / 2, img.width / 2);
+            ctximg.rotate((angle + offset) * Math.PI / 180);
+            ctximg.translate(-img.width / 2, -img.width / 2);
+            ctximg.drawImage(img, 0, 0);
+            return canvasimg;
         }
+
+        ctx.drawImage(rotateRobot(img_rocky, angle), position.x - 15, position.y - 15, img_rocky.width, img_rocky.height);
     }
 
     /**
@@ -135,11 +133,22 @@ export function PathDrawer() {
         }
         ctx.stroke();
 
-        drawCharger();
+        const firstPosition = new DOMPoint(path[path.length - 2][0], path[path.length - 2][1]).matrixTransform(pathTransform);
+        const secondPosition = new DOMPoint(path[path.length - 1][0], path[path.length - 1][1]).matrixTransform(pathTransform);
+        ctx.beginPath()
+        ctx.moveTo(firstPosition.x, firstPosition.y);
+        ctx.lineTo(secondPosition.x, secondPosition.y);
+        ctx.strokeStyle = "red";
+        ctx.stroke();
 
-        var angle = Math.atan2(path[path.length - 1][1] - path[path.length - 2][1], path[path.length - 1][0] - path[path.length - 2][0]) * 180 / Math.PI;
-        const position = new DOMPoint(path[path.length - 1][0], path[path.length - 1][1]).matrixTransform(pathTransform);
-        drawRobot(position, angle);
+        // drawCharger();
+
+        // if (path.length > 1) {
+            var angle = Math.atan2(path[path.length - 1][1] - path[path.length - 2][1], path[path.length - 1][0] - path[path.length - 2][0]) * 180 / Math.PI;
+            console.log(angle)
+        //     const position = new DOMPoint(path[path.length - 1][0], path[path.length - 1][1]).matrixTransform(pathTransform);
+        //     drawRobot(position, angle);
+        // }
     }
 
     return {
